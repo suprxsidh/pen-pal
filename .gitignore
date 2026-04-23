@@ -1,0 +1,24 @@
+# Built application files
+*.apk
+
+# Generated files
+build/
+app/build/
+.gradle/
+.kotlin/
+
+# Gradle files
+gradle-app.setting
+
+# Local configuration file
+local.properties
+
+# IntelliJ
+*.iml
+.idea/
+
+# MacOS
+.DS_Store
+
+# Secrets
+secrets.properties
