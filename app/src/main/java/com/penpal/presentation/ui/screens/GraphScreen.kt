@@ -9,8 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,9 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -42,6 +39,9 @@ fun GraphScreen(
     val characterNodes by viewModel.characterNodes.collectAsState()
     val edges by viewModel.edges.collectAsState()
     val characterEdges by viewModel.characterEdges.collectAsState()
+
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -65,6 +65,14 @@ fun GraphScreen(
                             if (uiState.viewMode != GraphViewMode.TIMELINE) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showEditDialog = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    }
+                    IconButton(onClick = { showDeleteDialog = true }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -92,6 +100,8 @@ fun GraphScreen(
                     location = uiState.sceneLocation,
                     mood = uiState.sceneMood,
                     characters = uiState.sceneCharacters,
+                    onEdit = { showEditDialog = true },
+                    onDelete = { showDeleteDialog = true },
                     onClose = { viewModel.resetView() }
                 )
             }
@@ -110,11 +120,11 @@ fun GraphScreen(
                     ) {
                         AssistChip(
                             onClick = { },
-                            label = { Text("Scenes (horizontal)") }
+                            label = { Text("Scenes →") }
                         )
                         AssistChip(
                             onClick = { },
-                            label = { Text("Characters (vertical)") }
+                            label = { Text("Characters ↓") }
                         )
                     }
 
@@ -154,16 +164,65 @@ fun GraphScreen(
                         }
                     }
 
-                    uiState.error?.let { error ->
+                    if (uiState.error != null) {
                         Text(
-                            text = error,
-                            color = MaterialTheme.colorScheme.error,
+                            text = uiState.error!!,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(8.dp)
                         )
                     }
                 }
             }
         }
+    }
+
+    if (showEditDialog && uiState.viewMode == GraphViewMode.SCENE_DETAIL) {
+        EditSceneDialog(
+            currentTitle = uiState.sceneTitle ?: "",
+            currentSummary = uiState.sceneSummary ?: "",
+            currentContent = uiState.sceneContent ?: "",
+            currentLocation = uiState.sceneLocation,
+            currentMood = uiState.sceneMood,
+            onSave = { title, summary, content, location, mood ->
+                uiState.selectedSceneId?.let { sceneId ->
+                    viewModel.updateScene(sceneId, title, summary, content, location, mood)
+                }
+                showEditDialog = false
+            },
+            onDismiss = { showEditDialog = false }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete?") },
+            text = { Text("Are you sure you want to delete this? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        when (uiState.viewMode) {
+                            GraphViewMode.SCENE_DETAIL -> {
+                                uiState.selectedSceneId?.let { viewModel.deleteScene(it) }
+                            }
+                            GraphViewMode.CHARACTER_JOURNEY -> {
+                                uiState.selectedCharacterId?.let { viewModel.deleteCharacter(it) }
+                            }
+                            else -> {}
+                        }
+                        viewModel.resetView()
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -233,6 +292,8 @@ fun SceneDetailView(
     location: String?,
     mood: String?,
     characters: List<String>,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -241,37 +302,119 @@ fun SceneDetailView(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium
-        )
-
+        Text(text = title, style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(16.dp))
 
-        summary.let {
+        if (summary.isNotEmpty()) {
             Text(text = "Summary", style = MaterialTheme.typography.titleSmall)
-            Text(text = it, style = MaterialTheme.typography.bodyMedium)
+            Text(text = summary, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        location?.let {
-            Text(text = "Location: $it", style = MaterialTheme.typography.bodyMedium)
-        }
-
-        mood?.let {
-            Text(text = "Mood: $it", style = MaterialTheme.typography.bodyMedium)
-        }
-
+        location?.let { Text(text = "Location: $it", style = MaterialTheme.typography.bodyMedium) }
+        mood?.let { Text(text = "Mood: $it", style = MaterialTheme.typography.bodyMedium) }
         if (characters.isNotEmpty()) {
             Text(text = "Characters: ${characters.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium)
         }
 
-        Divider()
+        HorizontalDivider()
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(text = "Full Content", style = MaterialTheme.typography.titleSmall)
         Text(text = content, style = MaterialTheme.typography.bodyMedium)
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            OutlinedButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Edit")
+            }
+            OutlinedButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        }
     }
+}
+
+@Composable
+fun EditSceneDialog(
+    currentTitle: String,
+    currentSummary: String,
+    currentContent: String,
+    currentLocation: String?,
+    currentMood: String?,
+    onSave: (String, String, String, String?, String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var title by remember { mutableStateOf(currentTitle) }
+    var summary by remember { mutableStateOf(currentSummary) }
+    var content by remember { mutableStateOf(currentContent) }
+    var location by remember { mutableStateOf(currentLocation ?: "") }
+    var mood by remember { mutableStateOf(currentMood ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Scene") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = summary,
+                    onValueChange = { summary = it },
+                    label = { Text("Summary") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("Content") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Location") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = mood,
+                    onValueChange = { mood = it },
+                    label = { Text("Mood") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(title, summary, content, location.ifBlank { null }, mood.ifBlank { null })
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -286,7 +429,7 @@ fun InteractiveGraphCanvas(
     onNodeDrag: (String, Float, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val textMeasurer = rememberTextMeasurer()
+    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
 
     Canvas(modifier = modifier) {
         val nodeRadius = 30f
@@ -322,58 +465,26 @@ fun InteractiveGraphCanvas(
             val isSelected = node.id == selectedNodeId
             val color = if (isSelected) Color(0xFF6650a4) else Color(0xFF2196F3)
 
-            drawCircle(
-                color = color,
-                radius = nodeRadius,
-                center = Offset(node.x, node.y)
-            )
-
+            drawCircle(color = color, radius = nodeRadius, center = Offset(node.x, node.y))
             if (isSelected) {
-                drawCircle(
-                    color = Color.White,
-                    radius = nodeRadius,
-                    center = Offset(node.x, node.y),
-                    style = Stroke(width = 3f)
-                )
+                drawCircle(color = Color.White, radius = nodeRadius, center = Offset(node.x, node.y), style = Stroke(width = 3f))
             }
 
-            val textResult = textMeasurer.measure(
-                text = node.title.take(15),
-                style = TextStyle(fontSize = 10.sp)
-            )
-            drawText(
-                textLayoutResult = textResult,
-                topLeft = Offset(node.x - textResult.size.width / 2, node.y + nodeRadius + 8)
-            )
+            val textResult = textMeasurer.measure(text = node.title.take(15), style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp))
+            drawText(textLayoutResult = textResult, topLeft = Offset(node.x - textResult.size.width / 2, node.y + nodeRadius + 8))
         }
 
         for (node in characterNodes) {
             val isSelected = node.id == selectedNodeId
             val color = Color(node.color)
 
-            drawRect(
-                color = color,
-                topLeft = Offset(node.x - charSize, node.y - charSize),
-                size = Size(charSize * 2, charSize * 2)
-            )
-
+            drawRect(color = color, topLeft = Offset(node.x - charSize, node.y - charSize), size = Size(charSize * 2, charSize * 2))
             if (isSelected) {
-                drawRect(
-                    color = Color.White,
-                    topLeft = Offset(node.x - charSize, node.y - charSize),
-                    size = Size(charSize * 2, charSize * 2),
-                    style = Stroke(width = 3f)
-                )
+                drawRect(color = Color.White, topLeft = Offset(node.x - charSize, node.y - charSize), size = Size(charSize * 2, charSize * 2), style = Stroke(width = 3f))
             }
 
-            val textResult = textMeasurer.measure(
-                text = node.name.take(15),
-                style = TextStyle(fontSize = 10.sp)
-            )
-            drawText(
-                textLayoutResult = textResult,
-                topLeft = Offset(node.x - textResult.size.width / 2, node.y + charSize + 8)
-            )
+            val textResult = textMeasurer.measure(text = node.name.take(15), style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp))
+            drawText(textLayoutResult = textResult, topLeft = Offset(node.x - textResult.size.width / 2, node.y + charSize + 8))
         }
     }
 }

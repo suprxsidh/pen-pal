@@ -9,8 +9,7 @@ import com.penpal.domain.repository.CharacterRepository
 import com.penpal.domain.repository.SceneCharacterRepository
 import com.penpal.domain.repository.SceneRepository
 import com.penpal.domain.repository.StoryRepository
-import com.penpal.presentation.ui.screens.GraphEdge
-import com.penpal.presentation.ui.screens.GraphNode
+import com.penpal.export.ExportService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -22,7 +21,8 @@ class GraphViewModel @Inject constructor(
     private val storyRepository: StoryRepository,
     private val sceneRepository: SceneRepository,
     private val characterRepository: CharacterRepository,
-    private val sceneCharacterRepository: SceneCharacterRepository
+    private val sceneCharacterRepository: SceneCharacterRepository,
+    private val exportService: ExportService
 ) : ViewModel() {
 
     private val storyId: String = savedStateHandle.get<String>("storyId") ?: ""
@@ -224,6 +224,25 @@ class GraphViewModel @Inject constructor(
             sceneRepository.deleteScene(sceneId)
             sceneCharacterRepository.removeSceneCharactersBySceneId(sceneId)
             loadGraphData()
+            _uiState.update { it.copy(error = "Scene deleted") }
+        }
+    }
+
+    fun updateScene(sceneId: String, title: String, summary: String, content: String, location: String?, mood: String?) {
+        viewModelScope.launch {
+            val scene = sceneRepository.getSceneById(sceneId)
+            if (scene != null) {
+                val updated = scene.copy(
+                    title = title,
+                    summary = summary,
+                    content = content,
+                    location = location,
+                    mood = mood
+                )
+                sceneRepository.updateScene(updated)
+                loadGraphData()
+                _uiState.update { it.copy(error = "Scene updated") }
+            }
         }
     }
 
@@ -238,7 +257,7 @@ class GraphViewModel @Inject constructor(
             }
             characterRepository.deleteCharacter(secondaryCharId)
             loadGraphData()
-            _uiState.update { it.copy(error = "Characters merged successfully") }
+            _uiState.update { it.copy(error = "Characters merged") }
         }
     }
 
@@ -249,7 +268,17 @@ class GraphViewModel @Inject constructor(
                 val updatedChar = character.copy(name = newName)
                 characterRepository.updateCharacter(updatedChar)
                 loadGraphData()
+                _uiState.update { it.copy(error = "Character renamed") }
             }
+        }
+    }
+
+    fun deleteCharacter(characterId: String) {
+        viewModelScope.launch {
+            characterRepository.deleteCharacter(characterId)
+            sceneCharacterRepository.removeSceneCharactersByCharacterId(characterId)
+            loadGraphData()
+            _uiState.update { it.copy(error = "Character deleted") }
         }
     }
 }
