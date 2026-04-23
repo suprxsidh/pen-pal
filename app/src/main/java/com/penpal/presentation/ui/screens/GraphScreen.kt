@@ -2,21 +2,23 @@ package com.penpal.presentation.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -39,17 +41,30 @@ fun GraphScreen(
     val sceneNodes by viewModel.sceneNodes.collectAsState()
     val characterNodes by viewModel.characterNodes.collectAsState()
     val edges by viewModel.edges.collectAsState()
-
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
+    val characterEdges by viewModel.characterEdges.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.storyTitle) },
+                title = {
+                    when (uiState.viewMode) {
+                        GraphViewMode.CHARACTER_JOURNEY -> Text(uiState.characterName ?: "Character Journey")
+                        GraphViewMode.SCENE_DETAIL -> Text(uiState.sceneTitle ?: "Scene Details")
+                        else -> Text(uiState.storyTitle)
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = {
+                        if (uiState.viewMode != GraphViewMode.TIMELINE) {
+                            viewModel.resetView()
+                        } else {
+                            onNavigateBack()
+                        }
+                    }) {
+                        Icon(
+                            if (uiState.viewMode != GraphViewMode.TIMELINE) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -59,96 +74,148 @@ fun GraphScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Scenes (horizontal)",
-                    style = MaterialTheme.typography.labelSmall
-                )
-                Text(
-                    text = "Characters (vertical)",
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                GraphCanvas(
+        when (uiState.viewMode) {
+            GraphViewMode.CHARACTER_JOURNEY -> {
+                CharacterJourneyView(
+                    characterName = uiState.characterName ?: "",
+                    sceneIds = uiState.journeyScenes,
                     sceneNodes = sceneNodes,
-                    characterNodes = characterNodes,
-                    edges = edges,
-                    scale = scale,
-                    offset = offset,
-                    selectedNodeId = uiState.selectedNodeId,
-                    onNodeTap = { nodeId ->
-                        viewModel.selectNode(nodeId)
-                    },
-                    onNodeDrag = { nodeId, x, y ->
-                        viewModel.updateNodePosition(nodeId, x, y)
-                    },
-                    onScaleChange = { newScale -> scale = newScale },
-                    onOffsetChange = { newOffset -> offset = newOffset },
-                    modifier = Modifier.fillMaxSize()
+                    onSceneClick = { viewModel.showSceneDetails(it) }
                 )
             }
 
-            if (sceneNodes.isEmpty()) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Text(
-                        text = "No scenes yet. Record and transcribe your story to see the graph.",
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+            GraphViewMode.SCENE_DETAIL -> {
+                SceneDetailView(
+                    title = uiState.sceneTitle ?: "",
+                    summary = uiState.sceneSummary ?: "",
+                    content = uiState.sceneContent ?: "",
+                    location = uiState.sceneLocation,
+                    mood = uiState.sceneMood,
+                    characters = uiState.sceneCharacters,
+                    onClose = { viewModel.resetView() }
+                )
             }
 
-            uiState.selectedNodeId?.let { nodeId ->
-                Card(
+            GraphViewMode.TIMELINE -> {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
+                        .fillMaxSize()
+                        .padding(padding)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = uiState.detailTitle ?: "Selected",
-                            style = MaterialTheme.typography.titleMedium
+                        AssistChip(
+                            onClick = { },
+                            label = { Text("Scenes (horizontal)") }
                         )
-                        uiState.detailSummary?.let { summary ->
-                            Spacer(modifier = Modifier.height(8.dp))
+                        AssistChip(
+                            onClick = { },
+                            label = { Text("Characters (vertical)") }
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        InteractiveGraphCanvas(
+                            sceneNodes = sceneNodes,
+                            characterNodes = characterNodes,
+                            edges = edges,
+                            characterEdges = characterEdges,
+                            selectedNodeId = uiState.selectedNodeId,
+                            onSceneTap = { viewModel.showSceneDetails(it) },
+                            onCharacterTap = { viewModel.showCharacterJourney(it) },
+                            onNodeDrag = { nodeId, x, y -> viewModel.updateNodePosition(nodeId, x, y) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    if (sceneNodes.isEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
                             Text(
-                                text = summary.take(150),
-                                style = MaterialTheme.typography.bodySmall
+                                text = "No scenes yet. Record and transcribe your story to see the graph.",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row {
-                            TextButton(onClick = { onNavigateToSceneDetail(nodeId) }) {
-                                Text("View Detail")
-                            }
-                            TextButton(onClick = { viewModel.clearSelection() }) {
-                                Text("Clear")
+                    }
+
+                    uiState.error?.let { error ->
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CharacterJourneyView(
+    characterName: String,
+    sceneIds: List<String>,
+    sceneNodes: List<SceneNodeData>,
+    onSceneClick: (String) -> Unit
+) {
+    val journeyScenes = sceneNodes.filter { it.id in sceneIds }.sortedBy { it.orderIndex }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "$characterName appears in ${journeyScenes.size} scenes:",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(journeyScenes) { scene ->
+                Card(
+                    onClick = { onSceneClick(scene.id) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = scene.title,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            scene.summary?.let {
+                                Text(
+                                    text = it.take(100),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -158,64 +225,71 @@ fun GraphScreen(
     }
 }
 
+@Composable 
+fun SceneDetailView(
+    title: String,
+    summary: String,
+    content: String,
+    location: String?,
+    mood: String?,
+    characters: List<String>,
+    onClose: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineMedium
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        summary.let {
+            Text(text = "Summary", style = MaterialTheme.typography.titleSmall)
+            Text(text = it, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        location?.let {
+            Text(text = "Location: $it", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        mood?.let {
+            Text(text = "Mood: $it", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        if (characters.isNotEmpty()) {
+            Text(text = "Characters: ${characters.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        Divider()
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(text = "Full Content", style = MaterialTheme.typography.titleSmall)
+        Text(text = content, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
 @Composable
-fun GraphCanvas(
+fun InteractiveGraphCanvas(
     sceneNodes: List<SceneNodeData>,
     characterNodes: List<CharacterNodeData>,
     edges: List<GraphEdge>,
-    scale: Float,
-    offset: Offset,
+    characterEdges: List<GraphEdge>,
     selectedNodeId: String?,
-    onNodeTap: (String) -> Unit,
+    onSceneTap: (String) -> Unit,
+    onCharacterTap: (String) -> Unit,
     onNodeDrag: (String, Float, Float) -> Unit,
-    onScaleChange: (Float) -> Unit,
-    onOffsetChange: (Offset) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
 
-    Canvas(
-        modifier = modifier
-            .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    val nodeRadius = 30f
-                    for (node in sceneNodes) {
-                        val nodeX = node.x * scale + offset.x
-                        val nodeY = node.y * scale + offset.y
-                        val distance = kotlin.math.sqrt(
-                            (offset.x - nodeX) * (offset.x - nodeX) +
-                            (offset.y - nodeY) * (offset.y - nodeY)
-                        )
-                        if (distance < nodeRadius) {
-                            onNodeTap(node.id)
-                            return@detectTapGestures
-                        }
-                    }
-                    for (node in characterNodes) {
-                        val nodeX = node.x * scale + offset.x
-                        val nodeY = node.y * scale + offset.y
-                        val distance = kotlin.math.sqrt(
-                            (offset.x - nodeX) * (offset.x - nodeX) +
-                            (offset.y - nodeY) * (offset.y - nodeY)
-                        )
-                        if (distance < nodeRadius) {
-                            onNodeTap(node.id)
-                            return@detectTapGestures
-                        }
-                    }
-                }
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onOffsetChange(Offset(
-                        offset.x + dragAmount.x,
-                        offset.y + dragAmount.y
-                    ))
-                }
-            }
-    ) {
-        val sceneRadius = 30f
+    Canvas(modifier = modifier) {
+        val nodeRadius = 30f
         val charSize = 25f
 
         for (edge in edges) {
@@ -224,9 +298,22 @@ fun GraphCanvas(
             if (fromNode != null && toNode != null) {
                 drawLine(
                     color = Color.Gray.copy(alpha = 0.5f),
-                    start = Offset(fromNode.x * scale + offset.x, fromNode.y * scale + offset.y),
-                    end = Offset(toNode.x * scale + offset.x, toNode.y * scale + offset.y),
-                    strokeWidth = 2f * scale
+                    start = Offset(fromNode.x, fromNode.y),
+                    end = Offset(toNode.x, toNode.y),
+                    strokeWidth = 2f
+                )
+            }
+        }
+
+        for (edge in characterEdges) {
+            val charNode = characterNodes.find { it.id == edge.fromId }
+            val sceneNode = sceneNodes.find { it.id == edge.toId }
+            if (charNode != null && sceneNode != null) {
+                drawLine(
+                    color = Color(charNode.color).copy(alpha = 0.3f),
+                    start = Offset(charNode.x, charNode.y),
+                    end = Offset(sceneNode.x, sceneNode.y),
+                    strokeWidth = 1f
                 )
             }
         }
@@ -234,68 +321,58 @@ fun GraphCanvas(
         for (node in sceneNodes) {
             val isSelected = node.id == selectedNodeId
             val color = if (isSelected) Color(0xFF6650a4) else Color(0xFF2196F3)
-            val centerX = node.x * scale + offset.x
-            val centerY = node.y * scale + offset.y
 
             drawCircle(
                 color = color,
-                radius = sceneRadius * scale,
-                center = Offset(centerX, centerY)
+                radius = nodeRadius,
+                center = Offset(node.x, node.y)
             )
 
             if (isSelected) {
                 drawCircle(
                     color = Color.White,
-                    radius = sceneRadius * scale,
-                    center = Offset(centerX, centerY),
-                    style = Stroke(width = 3f * scale)
+                    radius = nodeRadius,
+                    center = Offset(node.x, node.y),
+                    style = Stroke(width = 3f)
                 )
             }
 
-            val textLayoutResult = textMeasurer.measure(
+            val textResult = textMeasurer.measure(
                 text = node.title.take(15),
-                style = TextStyle(fontSize = (10 * scale).sp)
+                style = TextStyle(fontSize = 10.sp)
             )
             drawText(
-                textLayoutResult = textLayoutResult,
-                topLeft = Offset(
-                    centerX - textLayoutResult.size.width / 2,
-                    centerY + sceneRadius * scale + 8
-                )
+                textLayoutResult = textResult,
+                topLeft = Offset(node.x - textResult.size.width / 2, node.y + nodeRadius + 8)
             )
         }
 
         for (node in characterNodes) {
             val isSelected = node.id == selectedNodeId
             val color = Color(node.color)
-            val centerX = node.x * scale + offset.x
-            val centerY = node.y * scale + offset.y
 
             drawRect(
                 color = color,
-                topLeft = Offset(centerX - charSize * scale, centerY - charSize * scale),
-                size = androidx.compose.ui.geometry.Size(charSize * 2 * scale, charSize * 2 * scale)
+                topLeft = Offset(node.x - charSize, node.y - charSize),
+                size = Size(charSize * 2, charSize * 2)
             )
 
             if (isSelected) {
                 drawRect(
                     color = Color.White,
-                    topLeft = Offset(centerX - charSize * scale, centerY - charSize * scale),
-                    size = androidx.compose.ui.geometry.Size(charSize * 2 * scale, charSize * 2 * scale),
-                    style = Stroke(width = 3f * scale)
+                    topLeft = Offset(node.x - charSize, node.y - charSize),
+                    size = Size(charSize * 2, charSize * 2),
+                    style = Stroke(width = 3f)
                 )
             }
 
-            val textLayoutResult = textMeasurer.measure(
+            val textResult = textMeasurer.measure(
                 text = node.name.take(15),
-                style = TextStyle(fontSize = (10 * scale).sp)
+                style = TextStyle(fontSize = 10.sp)
             )
             drawText(
-                textLayoutResult = textLayoutResult,
-                topLeft = Offset(
-                    centerX - textLayoutResult.size.width / 2,
-                    centerY + charSize * scale + 8
-                )
+                textLayoutResult = textResult,
+                topLeft = Offset(node.x - textResult.size.width / 2, node.y + charSize + 8)
             )
         }
     }
