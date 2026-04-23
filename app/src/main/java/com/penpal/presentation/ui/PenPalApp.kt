@@ -6,11 +6,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.penpal.presentation.ui.screens.HomeScreen
+import com.penpal.presentation.ui.screens.RecordingScreen
 
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object Recording : Screen("recording/{storyId}") {
         fun createRoute(storyId: String) = "recording/$storyId"
+    }
+    data object Transcribe : Screen("transcribe/{recordingId}") {
+        fun createRoute(recordingId: String) = "transcribe/$recordingId"
     }
     data object Graph : Screen("graph/{storyId}") {
         fun createRoute(storyId: String) = "graph/$storyId"
@@ -39,6 +43,17 @@ fun PenPalApp() {
                 },
                 onNavigateToGraph = { storyId ->
                     navController.navigate(Screen.Graph.createRoute(storyId))
+                }
+            )
+        }
+
+        composable(Screen.Recording.route) { backStackEntry ->
+            val storyId = backStackEntry.arguments?.getString("storyId") ?: ""
+            RecordingScreen(
+                storyId = storyId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToTranscribe = { recordingId ->
+                    navController.navigate(Screen.Transcribe.createRoute(recordingId))
                 }
             )
         }
