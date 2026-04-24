@@ -81,6 +81,11 @@ class TranscribeViewModel @Inject constructor(
 
     fun stopTranscription() {
         transcriptionService.stopTranscription()
+        _uiState.update { it.copy(hasTranscription = true) }
+    }
+
+    fun editTranscription(newText: String) {
+        _uiState.update { it.copy(editedText = newText) }
     }
 
     fun processTranscribedText(text: String) {
@@ -134,6 +139,8 @@ data class TranscribeUiState(
     val storyId: String = "",
     val isProcessing: Boolean = false,
     val isComplete: Boolean = false,
+    val hasTranscription: Boolean = false,
+    val editedText: String = "",
     val generatedScenes: Int = 0,
     val error: String? = null
 )

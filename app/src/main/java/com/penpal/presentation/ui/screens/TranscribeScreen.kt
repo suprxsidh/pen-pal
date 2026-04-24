@@ -249,14 +249,52 @@ fun TranscribeScreen(
 
             AnimatedVisibility(visible = transcriptionState is TranscriptionState.Completed) {
                 Column {
-                    Button(
-                        onClick = { viewModel.saveTranscription() },
+                    // Preview Section
+                    val transcribedText = (transcriptionState as TranscriptionState.Completed).text
+                    
+                    Card(
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !uiState.isProcessing
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save & Generate Scenes")
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Preview Transcription",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = transcribedText,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.startTranscription() },
+                            enabled = !uiState.isProcessing
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Re-record")
+                        }
+                        
+                        Button(
+                            onClick = { viewModel.saveTranscription() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !uiState.isProcessing
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Save & Generate")
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
